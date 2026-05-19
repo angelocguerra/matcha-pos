@@ -2,7 +2,7 @@
 
 :root {
   --text: #5f6470;
-  --text-muted: #7f8592;
+  --text-muted: #5f6470;
   --text-h: #12131a;
   --bg: #faf7f2;
   --bg-alt: #fffdf9;
@@ -45,7 +45,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #b2b8c5;
-    --text-muted: #8f97a6;
+    --text-muted: #9ca3af;
     --text-h: #f5f7fb;
     --bg: #0f1116;
     --bg-alt: #151922;
@@ -79,10 +79,11 @@ body {
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
   border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
