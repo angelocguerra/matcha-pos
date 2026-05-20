@@ -611,7 +611,7 @@ export default function App() {
   // ─── MAIN MENU VIEW ──────────────────────────────────────────────────────────
   const col = CATEGORY_COLORS[activeCategory];
   return (
-    <div class="menu" style={{ fontFamily: "'Georgia', serif", background: "#faf8f5", minHeight: "100vh" }}>
+    <div className="menu" style={{ fontFamily: "'Georgia', serif", background: "#faf8f5", minHeight: "100vh" }}>
       <header style={{ background: "#2d6a4f", padding: "14px 28px", display: "flex", alignItems: "center", gap: 16 }}>
         <span style={{ color: "#fff", fontWeight: 700, fontSize: 24 }}>🍵 Mei TEA POS</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
@@ -629,7 +629,7 @@ export default function App() {
         </div>
       </header>
 
-      <div class="cards" style={{ padding: "28px 24px" }}>
+      <div className="cards" style={{ padding: "28px 24px" }}>
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ margin: "0 0 14px", fontSize: 28, color: "#333", fontWeight: 700, textAlign: "center" }}>Menu</h1>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -825,7 +825,12 @@ function StatCard({ label, val, isWarning }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const _rootContainer = document.getElementById("root");
+if (!_rootContainer) throw new Error("Root element not found");
+if (!_rootContainer.__reactRoot) {
+  _rootContainer.__reactRoot = ReactDOM.createRoot(_rootContainer);
+}
+_rootContainer.__reactRoot.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
