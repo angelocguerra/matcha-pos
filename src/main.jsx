@@ -836,10 +836,10 @@ _rootContainer.__reactRoot.render(
   </React.StrictMode>
 );
 
-if ("serviceWorker" in navigator) {
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
       console.log("SW registered");
     } catch (err) {
       console.error(err);

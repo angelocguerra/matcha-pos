@@ -7,7 +7,7 @@ module.exports = {
   cleanupOutdatedCaches: true,
   clientsClaim: true,
   skipWaiting: true,
-  navigateFallback: "/index.html",
+  navigateFallback: "/matcha-pos/index.html",
   runtimeCaching: [
     {
       urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/,

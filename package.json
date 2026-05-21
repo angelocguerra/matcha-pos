@@ -6,7 +6,7 @@
   "homepage": "https://angelocguerra.github.io/matcha-pos/",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && workbox generateSW workbox-config.cjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
