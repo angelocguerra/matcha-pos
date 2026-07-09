@@ -7,15 +7,6 @@ import { ArrowLeft, Banknote, History, Landmark, Minus, Plus, ShoppingCart, Smar
 import * as XLSX from "xlsx";
 
 const MENU = {
-  "Menu": [
-  { id: "ml1", name: "Mei Mei's Matcha", basePrice: 240, desc: "Koume Matcha, Oat Milk" },
-  { id: "ml2", name: "Jasmine Matcha", basePrice: 250, desc: "Hatsume Matcha, Jasmine Tea, Oat Milk" },
-  { id: "ml3", name: "Rock Star Mei Mei", basePrice: 260, desc: "Star Sea Salt Cloud, Matcha, Oat Milk" },
-  { id: "ml4", name: "Rock Star Jasmine", basePrice: 270, desc: "Star Sea Salt Cloud, Matcha, Jasmine Tea, Oat Milk" },
-  { id: "ml5", name: "Jasmine Milk Tea", basePrice: 160, desc: "Jasmine Tea, Oat Milk" },
-  { id: "ml6", name: "Jasmine Rocks", basePrice: 180, desc: "Star Sea Salt Cloud, Jasmine Tea" }
-],
-  /*
   "Matcha Lattes": [
     { id: "ml1", name: "Wang Wang Matcha Latte", basePrice: 260, desc: "Creamy signature blend, rich umami finish" },
     { id: "ml2", name: "Classic Matcha Latte", basePrice: 230, desc: "Ceremonial matcha, smooth milky balance" },
@@ -34,54 +25,48 @@ const MENU = {
     { id: "cf2", name: "Hojicha Cloud Oolong Tea", basePrice: 210, desc: "Roasted hojicha foam, mellow oolong aroma" },
     { id: "cf3", name: "Sea Salt Cloud Osmanthus Tea", basePrice: 210, desc: "Sea salt cream cloud, fragrant osmanthus tea" },
   ],
-  */
 };
 
-//const MATCHA_POWDERS = ["Hatsume", "Koume"];
-const MATCHA_STRENGTH = [
-  {id: "lvl1", label: "Level 1", price: 0},
-  {id: "lvl2", label: "Level 2", price: 40},
-  {id: "lvl3", label: "Level 3", price: 80},
+const MATCHA_POWDERS = [
+  { id: "yame", label: "Yame", price: 0 },
+  { id: "nichi", label: "Nichi", price: 0 },
 ];
+
 const SUGAR_LEVELS = ["Unsweetened", "Less Sweet", "Sweet"];
-const ICE_LEVELS = ["Less Ice", "Regular Ice", "More Ice"];
+const ICE_LEVELS = ["No Ice", "Less Ice", "Regular Ice"];
 
 const MILK_OPTIONS = [
   { id: "dairy", label: "Dairy Milk", price: 0 },
   { id: "oat", label: "Oat Milk", price: 0 },
+  { id: "soy", label: "Soy Milk", price: 30 },
+  { id: "meiji", label: "Meiji Fresh Milk", price: 30 },
 ];
 
 const DISCOUNT_CODES = {
-  ROCKSTAR: { type: "percent", value: 100, desc: "100% off discount for the first 3 customers" },
-  CLOUTCHASER: { type: "percent", value: 100, desc: "100% discount for KOL" },
+  MATCHA10: { type: "percent", value: 10, desc: "10% off" },
+  STUDENT20: { type: "percent", value: 20, desc: "20% student discount" },
+  FLAT50: { type: "flat", value: 50, desc: "₱50 off" },
+  WELCOME: { type: "percent", value: 15, desc: "15% welcome discount" },
+  BOGO: { type: "flat", value: 0, desc: "BOGO applied (manual)" },
 };
 
-
 const CATEGORY_ICONS = {
-  "Menu": "🍵"
+  "Matcha Lattes": "🍵",
+  "Milk Teas": "🧋",
+  "Tea Clouds": "☁️",
 };
 
 const CATEGORY_COLORS = {
-  "Menu": { accent: "#2d6a4f", badge: "#b7e4c7" },
-  //"Matcha Lattes": { accent: "#2d6a4f", badge: "#b7e4c7" },
-  //"Milk Teas": { accent: "#92400e", badge: "#fde68a" },
-  //"Tea Clouds": { accent: "#1e40af", badge: "#bfdbfe" },
+  "Matcha Lattes": { accent: "#2d6a4f", badge: "#b7e4c7" },
+  "Milk Teas": { accent: "#92400e", badge: "#fde68a" },
+  "Tea Clouds": { accent: "#1e40af", badge: "#bfdbfe" },
 };
 
 const STORAGE_KEY = "matcha_pos_orders";
 
 function loadOrders() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(parsed)
-      ? parsed.map((order) => ({
-          ...order,
-          items: Array.isArray(order?.items) ? order.items : [],
-        }))
-      : [];
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { return []; }
 }
 
 function saveOrder(order) {
@@ -95,9 +80,8 @@ function formatPHP(n) {
 }
 
 const FRESH_CUSTOMIZE = {
-  //matcha: "joume",
-  matcha_strength: "lvl1",
-  sugar: "Unsweetened",
+  matcha: "yame",
+  sugar: "Less Sweet",
   ice: "Regular Ice",
   milk: "oat",
   discountCode: "",
@@ -108,7 +92,7 @@ const FRESH_CUSTOMIZE = {
 
 export default function App() {
   const [view, setView] = useState("menu");
-  const [activeCategory, setActiveCategory] = useState("Menu");
+  const [activeCategory, setActiveCategory] = useState("Matcha Lattes");
   const [selectedItem, setSelectedItem] = useState(null);
   const [cart, setCart] = useState([]);
   const [orderHistory, setOrderHistory] = useState(loadOrders);
@@ -140,8 +124,7 @@ export default function App() {
   })();
 
   const computeItemPrice = (item, c) => {
-    //const matchaDelta = (MATCHA_POWDERS.find((m) => m.id === c.matcha) || {}).price || 0;
-    const matchaDelta = (MATCHA_STRENGTH.find((m) => m.id === c.matcha_strength) || {}).price || 0;
+    const matchaDelta = (MATCHA_POWDERS.find((m) => m.id === c.matcha) || {}).price || 0;
     const milkDelta = (MILK_OPTIONS.find((m) => m.id === c.milk) || {}).price || 0;
     const base = item.basePrice + matchaDelta + milkDelta;
     const itemDiscount = c.appliedDiscount ? getDiscount(c.appliedDiscount, base) || 0 : 0;
@@ -164,7 +147,7 @@ export default function App() {
       basePrice: selectedItem.basePrice,
       finalPrice,
       qty: customize.qty,
-      matcha_strength: customize.matcha_strength,
+      matcha: customize.matcha,
       sugar: customize.sugar,
       ice: customize.ice,
       milk: customize.milk,
@@ -241,8 +224,7 @@ export default function App() {
           "Status": ord.cancelled ? "CANCELLED" : "Completed",
           "Category": item.category,
           "Item": item.name,
-          //"Matcha Powder": MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label || item.matcha,
-          "Matcha Strength": MATCHA_STRENGTH.find((m) => m.id === item.matcha_strength)?.label || item.matcha_strength,
+          "Matcha Powder": MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label || item.matcha,
           "Sugar Level": item.sugar,
           "Ice Level": item.ice,
           "Milk Type": MILK_OPTIONS.find((m) => m.id === item.milk)?.label || item.milk,
@@ -258,8 +240,7 @@ export default function App() {
         "Status": ord.cancelled ? "CANCELLED" : "Completed",
         "Category": "",
         "Item": "ORDER TOTAL",
-        //"Matcha Powder": "",
-        "Matcha Strength": "",
+        "Matcha Powder": "",
         "Sugar Level": "",
         "Ice Level": "",
         "Milk Type": "",
@@ -320,7 +301,6 @@ export default function App() {
               <div style={{ fontSize: 20, fontWeight: 600, color: col.accent, marginTop: 6 }}>{formatPHP(selectedItem.basePrice)}</div>
             </div>
 
-            {/*}
             <Section title="Matcha Powder">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {MATCHA_POWDERS.map((m) => (
@@ -330,15 +310,6 @@ export default function App() {
                       {m.price === 0 ? "No extra charge" : m.price > 0 ? `+₱${m.price}` : `-₱${Math.abs(m.price)}`}
                     </span>
                   </OptionCard>
-                ))}
-              </div>
-            </Section>
-            */}
-
-            <Section title="Matcha Strength">
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                {MATCHA_STRENGTH.map((m) => (
-                  <PillBtn key={m.id} selected={customize.matcha_strength === m.id} onClick={() => setCustomize((c) => ({ ...c, matcha_strength: m.id }))} accent={col.accent}>{m.label}</PillBtn>
                 ))}
               </div>
             </Section>
@@ -388,17 +359,6 @@ export default function App() {
             </div>
             {
               (() => {
-                const matchaOpt = MATCHA_STRENGTH.find((m) => m.id === customize.matcha_strength) || {};
-                return (
-                  <Row
-                    label="Matcha Strength"
-                    val={matchaOpt.label || customize.matcha_strength}
-                  />
-                );
-              })()
-            }
-            {
-              (() => {
                 const milkOpt = MILK_OPTIONS.find((m) => m.id === customize.milk) || {};
                 return (
                   <Row
@@ -410,7 +370,7 @@ export default function App() {
             }
             <Row label="Sugar" val={customize.sugar} isTag />
             <Row label="Ice" val={customize.ice} isTag />
-            {/*<Row label="Matcha" val={MATCHA_POWDERS.find((m) => m.id === customize.matcha)?.label} isTag /> */}
+            <Row label="Matcha" val={MATCHA_POWDERS.find((m) => m.id === customize.matcha)?.label} isTag />
             {customize.appliedDiscount && (
               <Row label={`Discount (${customize.appliedDiscount})`} val={"-" + formatPHP(getDiscount(customize.appliedDiscount, previewPrice) || 0)} isDiscount />
             )}
@@ -531,7 +491,7 @@ export default function App() {
                 <div>
                   <div style={{ fontWeight: 700, color: "#374151" }}>{item.name} <span style={{ fontWeight: 400, color: "#374151" }}>×{item.qty}</span></div>
                   <div style={{ color: "#4b5563", fontSize: 12 }}>
-                    {/*{MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label} · */} {MATCHA_STRENGTH.find((m) => m.id === item.matcha_strength)?.label || item.matcha_strength} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}
+                    {MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}
                   </div>
                   {item.itemDiscount && <div style={{ color: "#2d6a4f", fontSize: 11 }}>Code: {item.itemDiscount}</div>}
                 </div>
@@ -616,7 +576,7 @@ export default function App() {
                 <div style={{ marginTop: 8 }}>
                   {ord.items.map((item, i) => (
                     <div key={i} style={{ fontSize: 13, color: ord.cancelled ? "#9ca3af" : "#555", display: "flex", justifyContent: "space-between" }}>
-                      <span>{item.name} ×{item.qty} · {MATCHA_STRENGTH.find((m) => m.id === item.matcha_strength)?.label || item.matcha_strength} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}</span>
+                      <span>{item.name} ×{item.qty} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}</span>
                       <span>{formatPHP(item.finalPrice * item.qty)}</span>
                     </div>
                   ))}
@@ -649,7 +609,7 @@ export default function App() {
   }
 
   // ─── MAIN MENU VIEW ──────────────────────────────────────────────────────────
-  const col = CATEGORY_COLORS[activeCategory] || CATEGORY_COLORS.Menu;
+  const col = CATEGORY_COLORS[activeCategory];
   return (
     <div className="menu" style={{ fontFamily: "'Georgia', serif", background: "#faf8f5", minHeight: "100vh" }}>
       <header style={{ background: "#2d6a4f", padding: "14px 28px", display: "flex", alignItems: "center", gap: 16 }}>
@@ -819,7 +779,7 @@ function CartItem({ item, onRemove, onQtyChange }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: catColor.accent }}>{item.name}</div>
           <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>
-            {/* {MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label} · */} {MATCHA_STRENGTH.find((m) => m.id === item.matcha_strength)?.label || item.matcha_strength} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}
+            {MATCHA_POWDERS.find((m) => m.id === item.matcha)?.label} · {item.sugar} · {item.ice} · {MILK_OPTIONS.find((m) => m.id === item.milk)?.label}
           </div>
           {item.itemDiscount && <div style={{ color: catColor.accent, fontSize: 11, marginTop: 4 }}>Discount: {item.itemDiscount}</div>}
         </div>
