@@ -40,8 +40,8 @@ const MENU = {
 //const MATCHA_POWDERS = ["Hatsume", "Koume"];
 const MATCHA_STRENGTH = [
   {id: "lvl1", label: "Level 1", price: 0},
-  {id: "lvl2", label: "Level 2", price: 40},
-  {id: "lvl3", label: "Level 3", price: 80},
+  {id: "lvl2", label: "Level 2", price: 30},
+  {id: "lvl3", label: "Level 3", price: 60},
 ];
 const SUGAR_LEVELS = ["Unsweetened", "Less Sweet", "Sweet"];
 const ICE_LEVELS = ["Less Ice", "Regular Ice", "More Ice"];
