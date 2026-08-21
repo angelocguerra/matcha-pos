@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 
@@ -8,6 +8,7 @@ import {
   History,
   Landmark,
   Minus,
+  Paperclip,
   Plus,
   ShoppingCart,
   Smartphone,
@@ -190,19 +191,6 @@ const ICE_LEVELS = [
   },
 ];
 
-const MILK_OPTIONS = [
-  {
-    id: "dairy",
-    label: "Dairy Milk",
-    price: 0,
-  },
-  {
-    id: "oat",
-    label: "Oat Milk",
-    price: 0,
-  },
-];
-
 const DISCOUNT_CODES = {
   ROCKSTAR: {
     type: "percent",
@@ -269,10 +257,280 @@ function loadOrders() {
   }
 }
 
-function saveOrder(order) {
+const PAYMENT_DB_NAME = "matcha_pos_payment_images";
+const PAYMENT_DB_VERSION = 1;
+const PAYMENT_STORE_NAME = "images";
+
+function openPaymentDB() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB is not supported by this browser."));
+      return;
+    }
+
+    const request = indexedDB.open(
+      PAYMENT_DB_NAME,
+      PAYMENT_DB_VERSION
+    );
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(PAYMENT_STORE_NAME)) {
+        db.createObjectStore(PAYMENT_STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(
+        request.error ||
+          new Error("Unable to open payment image storage.")
+      );
+  });
+}
+
+async function savePaymentImage(key, image) {
+  const db = await openPaymentDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(
+      PAYMENT_STORE_NAME,
+      "readwrite"
+    );
+
+    transaction.objectStore(PAYMENT_STORE_NAME).put(
+      image,
+      key
+    );
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      db.close();
+      reject(
+        transaction.error ||
+          new Error("Unable to save payment screenshot.")
+      );
+    };
+  });
+}
+
+async function getPaymentImage(key) {
+  if (!key) return null;
+
+  try {
+    const db = await openPaymentDB();
+
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(
+        PAYMENT_STORE_NAME,
+        "readonly"
+      );
+
+      const request = transaction
+        .objectStore(PAYMENT_STORE_NAME)
+        .get(key);
+
+      request.onsuccess = () => {
+        db.close();
+        resolve(request.result || null);
+      };
+
+      request.onerror = () => {
+        db.close();
+        reject(
+          request.error ||
+            new Error("Unable to load payment screenshot.")
+        );
+      };
+    });
+  } catch (error) {
+    console.error("Unable to load payment screenshot:", error);
+    return null;
+  }
+}
+
+/*
+ * Older versions stored payment screenshots directly inside
+ * localStorage as base64 strings. That quickly exceeds the browser's
+ * localStorage quota. This migration moves those screenshots into
+ * IndexedDB and leaves only a small reference in the order record.
+ */
+async function migratePaymentImages() {
   const orders = loadOrders();
-  orders.push(order);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+
+  const ordersWithImages = orders.filter(
+    (order) =>
+      order?.paymentImage &&
+      !order?.paymentImageKey
+  );
+
+  if (ordersWithImages.length === 0) {
+    return orders;
+  }
+
+  const migratedOrders = orders.map(
+    (order) => ({
+      ...order,
+    })
+  );
+
+  for (const order of migratedOrders) {
+    if (
+      !order?.paymentImage ||
+      order.paymentImageKey
+    ) {
+      continue;
+    }
+
+    const key = `payment-${order.orderNum}`;
+
+    try {
+      await savePaymentImage(
+        key,
+        order.paymentImage
+      );
+
+      delete order.paymentImage;
+      order.paymentImageKey = key;
+    } catch (error) {
+      console.error(
+        `Could not migrate payment screenshot for ${order.orderNum}:`,
+        error
+      );
+    }
+  }
+
+  /*
+   * Saving the migrated orders should be dramatically smaller because
+   * the base64 images have been removed.
+   */
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(migratedOrders)
+    );
+  } catch (error) {
+    console.error(
+      "Unable to save migrated orders:",
+      error
+    );
+
+    /*
+     * If localStorage is already unusually full, preserve the order
+     * records without the image payloads rather than crashing checkout.
+     */
+    const lightweightOrders =
+      migratedOrders.map(
+        (order) => {
+          const copy = {
+            ...order,
+          };
+          delete copy.paymentImage;
+          return copy;
+        }
+      );
+
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(lightweightOrders)
+      );
+    } catch (secondError) {
+      console.error(
+        "Unable to save lightweight order history:",
+        secondError
+      );
+    }
+  }
+
+  return migratedOrders;
+}
+
+async function saveOrder(order) {
+  /*
+   * Make sure any screenshots from the previous localStorage-based
+   * implementation are moved out before saving the new order.
+   */
+  await migratePaymentImages();
+
+  const storageOrder = {
+    ...order,
+  };
+
+  if (order.paymentImage) {
+    const key =
+      order.paymentImageKey ||
+      `payment-${order.orderNum}`;
+
+    await savePaymentImage(
+      key,
+      order.paymentImage
+    );
+
+    storageOrder.paymentImageKey = key;
+
+    /*
+     * Never put the base64 image into localStorage.
+     */
+    delete storageOrder.paymentImage;
+  }
+
+  const orders = loadOrders();
+  orders.push(storageOrder);
+
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(orders)
+    );
+  } catch (error) {
+    /*
+     * This is a safety net for other localStorage data. The payment
+     * screenshot itself is already safely stored in IndexedDB.
+     */
+    console.error(
+      "localStorage quota exceeded while saving order:",
+      error
+    );
+
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(
+          orders.map((savedOrder) => {
+            const lightweightOrder = {
+              ...savedOrder,
+            };
+            delete lightweightOrder.paymentImage;
+            return lightweightOrder;
+          })
+        )
+      );
+    } catch (secondError) {
+      console.error(
+        "Unable to save order history:",
+        secondError
+      );
+      throw secondError;
+    }
+  }
+
+  /*
+   * Return the original order for the receipt. This keeps the image
+   * available in React memory while avoiding localStorage bloat.
+   */
+  return {
+    ...order,
+    paymentImageKey:
+      storageOrder.paymentImageKey ||
+      order.paymentImageKey ||
+      null,
+  };
 }
 
 function getNextOrderNumber() {
@@ -317,6 +575,12 @@ export default function App() {
   const [paymentMethod, setPaymentMethod] =
     useState("Cash");
 
+  const [paymentImage, setPaymentImage] =
+    useState(null);
+
+  const [historyImage, setHistoryImage] =
+    useState(null);
+
   const [completedOrder, setCompletedOrder] =
     useState(null);
 
@@ -325,6 +589,27 @@ export default function App() {
 
   const [customize, setCustomize] =
     useState(FRESH_CUSTOMIZE);
+
+  useEffect(() => {
+    let mounted = true;
+
+    migratePaymentImages()
+      .then((migratedOrders) => {
+        if (mounted) {
+          setOrderHistory(migratedOrders);
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "Payment screenshot migration failed:",
+          error
+        );
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const cartTotal = cart.reduce(
     (sum, item) => sum + item.finalPrice * item.qty,
@@ -383,18 +668,10 @@ export default function App() {
           )?.price || 0
         : 0;
 
-    const milkDelta =
-      usesMilk(item)
-        ? MILK_OPTIONS.find(
-            (m) => m.id === c.milk
-          )?.price || 0
-        : 0;
-
     return (
       item.basePrice +
       powderDelta +
-      levelDelta +
-      milkDelta
+      levelDelta
     );
   };
 
@@ -420,11 +697,6 @@ export default function App() {
 
   const isMatchaLatte = activeCategory === "Matcha Lattes";
 
-  const usesMilk = (item) => {
-    if (!item) return false;
-    return !["Oolong Rocks", "Jasmine Rocks", "New York Fog"].includes(item.name);
-  };
-
   const availableMatchaOptions = (item) => {
     const standardBase = DRINK_MATCHA_BASE[item?.name];
     if (!standardBase) return [];
@@ -439,8 +711,7 @@ export default function App() {
     setCustomize({
       ...FRESH_CUSTOMIZE,
       powder: "standard",
-      level: activeCategory === "Matcha Lattes" ? "lvl1" : null,
-      milk: usesMilk(item) ? "oat" : null,
+      level: activeCategory === "Matcha Lattes" ? "lvl1" : null
     });
     setView("customize");
   };
@@ -532,7 +803,7 @@ export default function App() {
     }));
   };
 
-  const checkout = () => {
+  const checkout = async () => {
     if (cart.length === 0) return;
 
     const orderNum =
@@ -559,14 +830,24 @@ export default function App() {
 
       paymentMethod,
 
+      paymentImage,
+
       cancelled: false,
     };
 
-    saveOrder(order);
+    try {
+      const savedOrder = await saveOrder(order);
 
-    setOrderHistory(loadOrders());
+      setOrderHistory(loadOrders());
 
-    setCompletedOrder(order);
+      setCompletedOrder(savedOrder);
+    } catch (error) {
+      console.error("Checkout failed:", error);
+      window.alert(
+        "The order could not be saved. Please try again. Your payment screenshot was not lost."
+      );
+      return;
+    }
 
     setCart([]);
 
@@ -575,6 +856,8 @@ export default function App() {
     setDiscountError("");
 
     setOrderNote("");
+
+    setPaymentImage(null);
 
     setPaymentMethod("Cash");
 
@@ -643,14 +926,6 @@ export default function App() {
 
           "Ice Level":
             item.ice || "",
-
-          "Milk Type":
-            MILK_OPTIONS.find(
-              (m) =>
-                m.id === item.milk
-            )?.label ||
-            item.milk ||
-            "",
 
           Qty: item.qty,
 
@@ -1231,19 +1506,6 @@ export default function App() {
               </div>
             </Section>
 
-            {usesMilk(selectedItem) && (
-              <Section title="Milk Type">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {MILK_OPTIONS.map((m) => (
-                    <OptionCard key={m.id} selected={customize.milk === m.id} onClick={() => setCustomize((c) => ({ ...c, milk: m.id }))} accent={col.accent}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{m.label}</span>
-                      <span style={{ fontSize: 12, color: customize.milk === m.id ? "rgba(255,255,255,0.9)" : "#5f6470" }}>{m.price === 0 ? "No extra charge" : `+₱${m.price}`}</span>
-                    </OptionCard>
-                  ))}
-                </div>
-              </Section>
-            )}
-
             <Section title="Item Discount Code">
               <div
                 style={{
@@ -1403,17 +1665,6 @@ export default function App() {
                   MATCHA_LEVEL.find(
                     (m) => m.id === customize.level
                   )?.label || customize.level
-                }
-              />
-            )}
-
-            {usesMilk(selectedItem) && (
-              <Row
-                label="Milk"
-                val={
-                  MILK_OPTIONS.find(
-                    (m) => m.id === customize.milk
-                  )?.label || customize.milk
                 }
               />
             )}
@@ -2192,6 +2443,174 @@ export default function App() {
               </div>
             </div>
 
+            {(paymentMethod === "GCash" ||
+              paymentMethod === "Bank Transfer") && (
+              <div
+                style={{
+                  marginTop: 14,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#4b5563",
+                    marginBottom: 6,
+                  }}
+                >
+                  Payment Screenshot
+                </div>
+
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    minHeight: 70,
+                    padding: "12px",
+                    boxSizing: "border-box",
+                    border: "1px dashed #b7b7b7",
+                    borderRadius: 8,
+                    background: "#fafafa",
+                    color: "#4b5563",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
+                >
+                  <Paperclip size={17} />
+                  <span>
+                    {paymentImage
+                      ? "Change attached image"
+                      : "Attach payment screenshot"}
+                  </span>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      if (file.size > 5 * 1024 * 1024) {
+                        window.alert("Please choose an image smaller than 5 MB.");
+                        e.target.value = "";
+                        return;
+                      }
+
+                      const reader = new FileReader();
+
+                      reader.onload = () => {
+                        const img = new Image();
+
+                        img.onload = () => {
+                          const MAX_DIMENSION = 1600;
+                          const scale = Math.min(
+                            1,
+                            MAX_DIMENSION / Math.max(
+                              img.naturalWidth,
+                              img.naturalHeight
+                            )
+                          );
+
+                          const canvas =
+                            document.createElement("canvas");
+
+                          canvas.width = Math.max(
+                            1,
+                            Math.round(
+                              img.naturalWidth * scale
+                            )
+                          );
+
+                          canvas.height = Math.max(
+                            1,
+                            Math.round(
+                              img.naturalHeight * scale
+                            )
+                          );
+
+                          const context =
+                            canvas.getContext("2d");
+
+                          context.drawImage(
+                            img,
+                            0,
+                            0,
+                            canvas.width,
+                            canvas.height
+                          );
+
+                          /*
+                           * JPEG compression keeps screenshots visually
+                           * clear while making them much smaller than the
+                           * original camera/screenshot file.
+                           */
+                          const compressed =
+                            canvas.toDataURL(
+                              "image/jpeg",
+                              0.72
+                            );
+
+                          setPaymentImage(
+                            compressed
+                          );
+                        };
+
+                        img.onerror = () => {
+                          window.alert(
+                            "Unable to read that image. Please choose another screenshot."
+                          );
+                        };
+
+                        img.src =
+                          reader.result;
+                      };
+
+                      reader.readAsDataURL(file);
+                    }}
+                    style={{ display: "none" }}
+                  />
+                </label>
+
+                {paymentImage && (
+                  <div style={{ marginTop: 8 }}>
+                    <img
+                      src={paymentImage}
+                      alt="Payment screenshot preview"
+                      style={{
+                        width: "100%",
+                        maxHeight: 180,
+                        objectFit: "contain",
+                        borderRadius: 8,
+                        border: "1px solid #ddd",
+                        background: "#f5f5f5",
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentImage(null)}
+                      style={{
+                        marginTop: 6,
+                        width: "100%",
+                        border: "1px solid #f0b5b5",
+                        background: "#fff5f5",
+                        color: "#dc2626",
+                        borderRadius: 8,
+                        padding: "7px 10px",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Remove Image
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div
               style={{
                 marginTop: 14,
@@ -2451,7 +2870,6 @@ export default function App() {
                           item.ice
                       )?.label ||
                         item.ice}{" "}
-                      {item.milk ? ` · ${MILK_OPTIONS.find((m) => m.id === item.milk)?.label || item.milk}` : ""}
                     </div>
 
                     {item.itemDiscount && (
@@ -2527,6 +2945,40 @@ export default function App() {
             }
             isTag
           />
+
+          {completedOrder.paymentImage && (
+            <div
+              style={{
+                marginTop: 14,
+                paddingTop: 14,
+                borderTop: "1px solid #eee",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#4b5563",
+                  marginBottom: 8,
+                  fontWeight: 600,
+                }}
+              >
+                Payment Screenshot
+              </div>
+
+              <img
+                src={completedOrder.paymentImage}
+                alt="Payment screenshot"
+                style={{
+                  width: "100%",
+                  maxHeight: 280,
+                  objectFit: "contain",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: "#f5f5f5",
+                }}
+              />
+            </div>
+          )}
 
           <div
             style={{
@@ -3134,13 +3586,6 @@ export default function App() {
                               )?.label ||
                                 item.ice}{" "}
                               ·{" "}
-                              {
-                                MILK_OPTIONS.find(
-                                  (m) =>
-                                    m.id ===
-                                    item.milk
-                                )?.label
-                              }
                             </span>
 
                             <span>
@@ -3197,55 +3642,90 @@ export default function App() {
                           <div
                             style={{
                               marginTop: 6,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              flexWrap: "wrap",
                             }}
                           >
+                            {/* Payment Method Tag */}
                             <span
                               style={{
                                 fontSize: 11,
                                 background:
-                                  order.paymentMethod ===
-                                  "Cash"
+                                  order.paymentMethod === "Cash"
                                     ? "#f0fdf4"
-                                    : order.paymentMethod ===
-                                      "GCash"
+                                    : order.paymentMethod === "GCash"
                                     ? "#eff6ff"
                                     : "#fdf3e3",
                                 color:
-                                  order.paymentMethod ===
-                                  "Cash"
+                                  order.paymentMethod === "Cash"
                                     ? "#166534"
-                                    : order.paymentMethod ===
-                                      "GCash"
+                                    : order.paymentMethod === "GCash"
                                     ? "#1e40af"
                                     : "#92400e",
                                 border: `1px solid ${
-                                  order.paymentMethod ===
-                                  "Cash"
+                                  order.paymentMethod === "Cash"
                                     ? "#bbf7d0"
-                                    : order.paymentMethod ===
-                                      "GCash"
+                                    : order.paymentMethod === "GCash"
                                     ? "#bfdbfe"
                                     : "#fde68a"
                                 }`,
-                                borderRadius:
-                                  20,
-                                padding:
-                                  "2px 10px",
-                                fontWeight:
-                                  600,
+                                borderRadius: 20,
+                                padding: "2px 10px",
+                                fontWeight: 600,
                               }}
                             >
-                              {order.paymentMethod ===
-                              "Cash"
+                              {order.paymentMethod === "Cash"
                                 ? "💵"
-                                : order.paymentMethod ===
-                                  "GCash"
+                                : order.paymentMethod === "GCash"
                                 ? "📱"
                                 : "🏦"}{" "}
-                              {
-                                order.paymentMethod
-                              }
+                              {order.paymentMethod}
                             </span>
+
+                            {/* View Payment Screenshot */}
+                            {(order.paymentMethod === "GCash" ||
+                              order.paymentMethod === "Bank Transfer") && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  let image = null;
+
+                                  if (order.paymentImage) {
+                                    image = order.paymentImage;
+                                  } else if (order.paymentImageKey) {
+                                    image = await getPaymentImage(
+                                      order.paymentImageKey
+                                    );
+                                  }
+
+                                  if (image) {
+                                    setHistoryImage(image);
+                                  } else {
+                                    window.alert(
+                                      "The payment screenshot could not be found."
+                                    );
+                                  }
+                                }}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  background: "#f0faf5",
+                                  color: "#2d6a4f",
+                                  border: "1px solid #b7e4c7",
+                                  borderRadius: 8,
+                                  padding: "5px 10px",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Paperclip size={13} />
+                                View Payment Screenshot
+                              </button>
+                            )}
                           </div>
                         )}
                     </div>
@@ -3254,6 +3734,85 @@ export default function App() {
               )
           )}
         </div>
+
+        {historyImage && (
+    <div
+      onClick={() => setHistoryImage(null)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0,0,0,0.72)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 700,
+          maxHeight: "90vh",
+          background: "#fff",
+          borderRadius: 16,
+          padding: 16,
+          boxSizing: "border-box",
+          overflow: "auto",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setHistoryImage(null)}
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            border: "none",
+            background: "#f3f4f6",
+            color: "#374151",
+            cursor: "pointer",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+          aria-label="Close payment screenshot"
+        >
+          ×
+        </button>
+
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: "#2d6a4f",
+            marginBottom: 12,
+            paddingRight: 40,
+          }}
+        >
+          Payment Screenshot
+        </div>
+
+        <img
+          src={historyImage}
+          alt="Payment screenshot"
+          style={{
+            display: "block",
+            width: "100%",
+            maxHeight: "75vh",
+            objectFit: "contain",
+            borderRadius: 10,
+            background: "#f5f5f5",
+          }}
+        />
+      </div>
+    </div>
+  )}
       </div>
     );
   }
@@ -3918,7 +4477,6 @@ function CartItem({
                 item.ice
             )?.label ||
               item.ice}{" "}
-            {item.milk ? ` · ${MILK_OPTIONS.find((m) => m.id === item.milk)?.label || item.milk}` : ""}
           </div>
 
           {item.itemDiscount && (
