@@ -197,3 +197,543 @@ textarea,
   }
 }
 
+/* ================================
+   GLOBAL RESPONSIVE STYLES
+   ================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea {
+  max-width: 100%;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ================================
+   DESKTOP / TABLET
+   ================================ */
+
+.customize-grid,
+.cart-grid {
+  width: 100%;
+}
+
+/* ================================
+   TABLET
+   ================================ */
+
+@media (max-width: 900px) {
+  .customize-grid {
+    grid-template-columns: 1fr !important;
+    padding: 20px 16px !important;
+  }
+
+  .cart-grid {
+    grid-template-columns: 1fr !important;
+    padding: 20px 16px !important;
+  }
+
+  .order-summary {
+    position: static !important;
+    width: 100% !important;
+  }
+}
+
+/* ================================
+   MOBILE
+   ================================ */
+
+@media (max-width: 600px) {
+  body {
+    font-size: 14px;
+  }
+
+  /* Headers */
+  header {
+    padding: 12px 14px !important;
+    gap: 8px !important;
+    min-height: 56px;
+  }
+
+  header > span {
+    min-width: 0;
+  }
+
+  /* Prevent long titles from pushing buttons off-screen */
+  header span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Main page containers */
+  .customize-grid,
+  .cart-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100%;
+    padding: 16px 12px !important;
+    gap: 16px !important;
+  }
+
+  .customize-main {
+    width: 100% !important;
+  }
+
+  /* Order summary */
+  .order-summary {
+    position: static !important;
+    width: 100% !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Customization sections */
+  .customize-main > div {
+    max-width: 100%;
+  }
+
+  /* Matcha powder cards */
+  .customize-main .option-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Discount inputs */
+  .light-field {
+    min-width: 0;
+  }
+
+  /* Inputs + Apply buttons */
+  .customize-main input,
+  .order-summary input {
+    min-width: 0;
+  }
+
+  /* Payment methods */
+  .payment-method-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Buttons */
+  button {
+    touch-action: manipulation;
+  }
+
+  /* Make buttons easier to tap */
+  .qty-btn {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+
+  /* Cart items */
+  .cart-item {
+    width: 100% !important;
+  }
+
+  /* History cards */
+  .history-card {
+    width: 100% !important;
+  }
+
+  /* Tables / wide content */
+  .history-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modal */
+  .payment-modal {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: 90vh !important;
+    padding: 12px !important;
+  }
+}
+
+/* ================================
+   SMALL PHONES
+   ================================ */
+
+@media (max-width: 400px) {
+  header {
+    padding: 10px 10px !important;
+  }
+
+  header span {
+    font-size: 16px !important;
+  }
+
+  .customize-grid,
+  .cart-grid {
+    padding: 12px 10px !important;
+  }
+
+  .order-summary {
+    padding: 14px !important;
+  }
+
+  /* Stack discount input and button */
+  .discount-row {
+    flex-direction: column !important;
+  }
+
+  .discount-row button {
+    width: 100% !important;
+  }
+
+  /* Stack action buttons */
+  .action-row {
+    flex-direction: column !important;
+  }
+
+  .action-row button {
+    width: 100% !important;
+  }
+}
+
+/* =====================================================
+   ORDER HISTORY - MOBILE RESPONSIVE
+   ===================================================== */
+
+.history-header,
+.history-content,
+.history-order-card {
+  box-sizing: border-box;
+}
+
+
+/* =====================================================
+   TABLET
+   ===================================================== */
+
+@media (max-width: 900px) {
+
+  .history-content {
+    padding: 20px 16px !important;
+  }
+
+  .history-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .history-order-header {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .history-order-actions {
+    width: 100%;
+    justify-content: space-between !important;
+  }
+
+}
+
+
+/* =====================================================
+   MOBILE
+   ===================================================== */
+
+@media (max-width: 600px) {
+
+  /* ---------------------------------------------
+     Prevent entire page from creating horizontal
+     scrolling
+     --------------------------------------------- */
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+
+  /* ---------------------------------------------
+     HEADER
+     --------------------------------------------- */
+
+  .history-header {
+    width: 100%;
+    padding: 10px 12px !important;
+
+    display: flex !important;
+    flex-wrap: wrap !important;
+
+    gap: 8px !important;
+  }
+
+  .history-header > button {
+    flex-shrink: 0;
+    padding: 7px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .history-header > span {
+    flex: 1 1 auto;
+    min-width: 0;
+
+    font-size: 17px !important;
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .history-header > div {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .history-header > div > button {
+    width: 100%;
+    padding: 9px 12px !important;
+  }
+
+
+  /* ---------------------------------------------
+     MAIN CONTENT
+     --------------------------------------------- */
+
+  .history-content {
+    width: 100%;
+    max-width: 100%;
+
+    padding: 14px 10px !important;
+
+    box-sizing: border-box;
+  }
+
+
+  /* ---------------------------------------------
+     STATISTICS
+     --------------------------------------------- */
+
+  .history-stats {
+    width: 100%;
+
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+
+    gap: 8px !important;
+
+    margin-bottom: 16px !important;
+  }
+
+
+  /* ---------------------------------------------
+     TODAY / ALL TIME
+     --------------------------------------------- */
+
+  .history-filters {
+    width: 100%;
+
+    display: grid !important;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+
+    gap: 8px !important;
+
+    margin-bottom: 14px !important;
+  }
+
+  .history-filters button {
+    width: 100%;
+    min-width: 0;
+
+    padding: 9px 8px !important;
+  }
+
+
+  /* ---------------------------------------------
+     ORDER CARD
+     --------------------------------------------- */
+
+  .history-order-card {
+    width: 100%;
+    max-width: 100%;
+
+    padding: 13px !important;
+    margin-bottom: 10px !important;
+
+    overflow: hidden;
+
+    box-sizing: border-box;
+  }
+
+
+  /* ---------------------------------------------
+     ORDER HEADER
+     --------------------------------------------- */
+
+  .history-order-header {
+    width: 100%;
+
+    display: flex !important;
+    flex-direction: column !important;
+
+    gap: 10px !important;
+  }
+
+
+  /* ---------------------------------------------
+     ORDER NUMBER / DATE / STATUS
+     --------------------------------------------- */
+
+  .history-order-info {
+    width: 100%;
+
+    min-width: 0;
+
+    display: flex !important;
+    flex-wrap: wrap !important;
+
+    gap: 6px 8px !important;
+  }
+
+
+  /* ---------------------------------------------
+     TOTAL + ACTIONS
+     --------------------------------------------- */
+
+  .history-order-actions {
+    width: 100%;
+
+    display: flex !important;
+
+    justify-content: space-between !important;
+    align-items: center !important;
+
+    gap: 8px !important;
+
+    flex-wrap: wrap !important;
+  }
+
+
+  /* ---------------------------------------------
+     ORDER ITEMS
+     --------------------------------------------- */
+
+  .history-order-card > div {
+    max-width: 100%;
+  }
+
+  .history-order-card span {
+    max-width: 100%;
+  }
+
+
+  /* ---------------------------------------------
+     ITEM ROWS
+     --------------------------------------------- */
+
+  .history-order-card
+    div[style*="justify-content"] {
+    min-width: 0;
+  }
+
+
+  /* ---------------------------------------------
+     BUTTONS
+     --------------------------------------------- */
+
+  .history-order-actions button {
+    min-height: 38px;
+
+    padding: 8px 10px !important;
+
+    white-space: normal;
+
+    font-size: 12px !important;
+  }
+
+
+  /* ---------------------------------------------
+     PAYMENT SCREENSHOT BUTTON
+     --------------------------------------------- */
+
+  .history-order-card button {
+    max-width: 100%;
+  }
+
+}
+
+
+/* =====================================================
+   SMALL PHONES
+   ===================================================== */
+
+@media (max-width: 400px) {
+
+  .history-content {
+    padding: 10px 8px !important;
+  }
+
+  .history-header {
+    padding: 9px 10px !important;
+  }
+
+  .history-header > span {
+    font-size: 15px !important;
+  }
+
+  .history-stats {
+    grid-template-columns: 1fr !important;
+  }
+
+  .history-order-card {
+    padding: 11px !important;
+  }
+
+  .history-order-actions {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .history-order-actions button {
+    width: 100%;
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  .history-item-row {
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .history-item-row > span:first-child {
+    min-width: 0;
+    flex: 1;
+
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .history-item-row > span:last-child {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+}

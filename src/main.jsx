@@ -73,13 +73,24 @@ const MENU = {
       </>
     ),
   },
+  {
+    id: "ml6",
+    name: "Honey Whipped Matcha",
+    basePrice: 290,
+    desc: (
+      <>
+        Honey Whipped Foam, Ukiyo Matcha,<br />
+        Oat Milk
+      </>
+    ),
+  },
 ],
 
   Teas: [
     {
       id: "nm1",
       name: "Oolong Rocks",
-      basePrice: 160,
+      basePrice: 200,
       desc: "Star Sea Salt Cloud, Oolong Tea",
     },
     {
@@ -141,6 +152,7 @@ const DRINK_MATCHA_BASE = {
   "Mei Mei's Matcha": "Ukiyo",
   "Jasmine Matcha": "Hatsume",
   "Rockstar-Berry": "Ukiyo",
+  "Honey Whipped Matcha": "Ukiyo"
 };
 
 const MATCHA_LEVEL = [
@@ -192,15 +204,25 @@ const ICE_LEVELS = [
 ];
 
 const DISCOUNT_CODES = {
-  ROCKSTAR: {
+  "5OFF": {
     type: "percent",
-    value: 100,
-    desc: "100% off discount for the first 3 customers",
+    value: 5,
+    scope: "item",
+    desc: "5% off discount for one drink",
   },
+
   CLOUTCHASER: {
     type: "percent",
     value: 100,
-    desc: "100% discount for KOL",
+    scope: "item",
+    desc: "100% discount for KOL 1 free drink",
+  },
+
+  "15OFF": {
+    type: "percent",
+    value: 15,
+    scope: "item",
+    desc: "15% off discount on one drink",
   },
 };
 
@@ -249,7 +271,18 @@ function loadOrders() {
     return Array.isArray(parsed)
       ? parsed.map((order) => ({
           ...order,
-          items: Array.isArray(order?.items) ? order.items : [],
+
+          items: Array.isArray(order?.items)
+            ? order.items
+            : [],
+
+          // Existing orders without a status
+          // are considered pending.
+          status:
+            order?.status || "pending",
+
+          customerName:
+            order?.customerName || "",
         }))
       : [];
   } catch {
@@ -571,7 +604,10 @@ export default function App() {
     useState(null);
   const [discountError, setDiscountError] = useState("");
 
+  const [customerName, setCustomerName] = useState("");
+
   const [orderNote, setOrderNote] = useState("");
+
   const [paymentMethod, setPaymentMethod] =
     useState("Cash");
 
@@ -639,6 +675,43 @@ export default function App() {
       return cartTotal;
     }
 
+    // ==========================================
+    // ITEM-ONLY DISCOUNT
+    // Apply to ONE drink only
+    // ==========================================
+    if (discount.scope === "item") {
+      if (cart.length === 0) {
+        return cartTotal;
+      }
+
+      // Find the first drink with at least 1 quantity
+      const firstItem = cart.find(
+        (item) => item.qty > 0
+      );
+
+      if (!firstItem) {
+        return cartTotal;
+      }
+
+      // Discount ONLY ONE unit of the drink.
+      const singleDrinkPrice = Number(
+        firstItem.finalPrice || 0
+      );
+
+      const discountAmount =
+        discount.type === "percent"
+          ? (singleDrinkPrice * discount.value) / 100
+          : discount.value;
+
+      return Math.max(
+        0,
+        cartTotal - discountAmount
+      );
+    }
+
+    // ==========================================
+    // ORDER-WIDE DISCOUNT
+    // ==========================================
     const discountAmount =
       discount.type === "percent"
         ? (cartTotal * discount.value) / 100
@@ -765,16 +838,18 @@ export default function App() {
   };
 
   const applyOrderDiscount = () => {
-    const code =
-      discountCode.trim().toUpperCase();
+    const code = discountCode.trim().toUpperCase();
+    const discount = DISCOUNT_CODES[code];
 
-    if (!DISCOUNT_CODES[code]) {
-      setDiscountError(
-        "Invalid discount code"
-      );
+    if (!discount) {
+      setDiscountError("Invalid discount code");
       setAppliedDiscount(null);
       return;
     }
+
+    // Item-scope codes are allowed here.
+    // They will automatically apply to only ONE drink
+    // when billTotal is calculated.
 
     setAppliedDiscount(code);
     setDiscountError("");
@@ -786,10 +861,25 @@ export default function App() {
         .trim()
         .toUpperCase();
 
-    if (!DISCOUNT_CODES[code]) {
+    const discount = DISCOUNT_CODES[code];
+
+    if (!discount) {
       setCustomize((current) => ({
         ...current,
         discountError: "Invalid code",
+        appliedDiscount: null,
+      }));
+
+      return;
+    }
+
+    // Item discounts are valid here.
+    // Order-only codes can be blocked if you add any later.
+    if (discount.scope === "order") {
+      setCustomize((current) => ({
+        ...current,
+        discountError:
+          "This discount code can only be applied to the entire order.",
         appliedDiscount: null,
       }));
 
@@ -811,15 +901,15 @@ export default function App() {
 
     const order = {
       orderNum,
-
       date: new Date().toISOString(),
+
+      customerName: customerName.trim(),
 
       items: cart,
 
       subtotal: cartTotal,
 
-      orderDiscount:
-        appliedDiscount,
+      orderDiscount: appliedDiscount,
 
       discountAmount:
         cartTotal - billTotal,
@@ -833,6 +923,9 @@ export default function App() {
       paymentImage,
 
       cancelled: false,
+
+      // New orders start as pending.
+      status: "pending",
     };
 
     try {
@@ -854,6 +947,8 @@ export default function App() {
     setAppliedDiscount(null);
     setDiscountCode("");
     setDiscountError("");
+
+    setCustomerName("");
 
     setOrderNote("");
 
@@ -885,6 +980,27 @@ export default function App() {
     setOrderHistory(updated);
   };
 
+  const completeOrder = (orderNum) => {
+    const updated = loadOrders().map(
+      (order) =>
+        order.orderNum === orderNum
+          ? {
+              ...order,
+              status: "served",
+              servedAt:
+                new Date().toISOString(),
+            }
+          : order
+    );
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(updated)
+    );
+
+    setOrderHistory(updated);
+  };
+
   const exportToExcel = () => {
     const orders = loadOrders();
 
@@ -899,9 +1015,14 @@ export default function App() {
             order.date
           ).toLocaleString("en-PH"),
 
+          "Customer Name":
+            order.customerName || "",
+          
           Status: order.cancelled
             ? "CANCELLED"
-            : "Completed",
+            : order.status === "served"
+            ? "SERVED"
+            : "PENDING",
 
           Category:
             item.category,
@@ -1143,7 +1264,8 @@ export default function App() {
   const activeOrders =
     filteredHistory.filter(
       (order) =>
-        !order.cancelled
+        !order.cancelled &&
+        order.status === "served"
     );
 
   const todayRevenue =
@@ -1319,16 +1441,13 @@ export default function App() {
           className="customize-grid"
           style={{
             flex: 1,
-            display:
-              "grid",
+            display: "grid",
             gridTemplateColumns:
-              "minmax(0, 1fr) minmax(320px, 360px)",
+              "minmax(0, 1fr) minmax(280px, 360px)",
             width: "100%",
-            padding:
-              "28px 24px",
+            padding: "28px 24px",
             gap: 24,
-            boxSizing:
-              "border-box",
+            boxSizing: "border-box",
           }}
         >
           <div
@@ -1568,6 +1687,14 @@ export default function App() {
                   Apply
                 </button>
               </div>
+
+              <div
+                className="discount-row"
+                style={{
+                  display: "flex",
+                  gap: 8,
+                }}
+              ></div>
 
               {customize.appliedDiscount && (
                 <div
@@ -1947,15 +2074,12 @@ export default function App() {
         }}
       >
         <header
+          className="history-header"
           style={{
-            background:
-              "#2d6a4f",
-            padding:
-              "14px 28px",
-            display:
-              "flex",
-            alignItems:
-              "center",
+            background: "#2d6a4f",
+            padding: "14px 28px",
+            display: "flex",
+            alignItems: "center",
             gap: 16,
           }}
         >
@@ -2021,12 +2145,9 @@ export default function App() {
           className="cart-grid"
           style={{
             flex: 1,
-            padding:
-              "28px 24px",
-            display:
-              "grid",
-            gridTemplateColumns:
-              "1fr 340px",
+            padding: "28px 24px",
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) 340px",
             gap: 24,
           }}
         >
@@ -2334,11 +2455,10 @@ export default function App() {
               </div>
 
               <div
+                className="payment-method-grid"
                 style={{
-                  display:
-                    "grid",
-                  gridTemplateColumns:
-                    "1fr 1fr 1fr",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
                   gap: 8,
                 }}
               >
@@ -2616,6 +2736,36 @@ export default function App() {
                 marginTop: 14,
               }}
             >
+              <div style={{ marginTop: 14 }}>
+
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#4b5563",
+                  marginBottom: 6,
+                }}
+              >
+                Customer Name
+              </div>
+
+              <input
+                className="light-field"
+                type="text"
+                value={customerName}
+                onChange={(e) =>
+                  setCustomerName(e.target.value)
+                }
+                placeholder="Enter customer name..."
+                style={{
+                  width: "100%",
+                  padding: "9px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
               <div
                 style={{
                   fontSize: 13,
@@ -2789,6 +2939,18 @@ export default function App() {
                 "en-PH"
               )}
             </div>
+            {completedOrder.customerName && (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 14,
+                  color: "#374151",
+                  fontWeight: 600,
+                }}
+              >
+                Customer: {completedOrder.customerName}
+              </div>
+            )}
           </div>
 
           <div
@@ -3099,15 +3261,12 @@ export default function App() {
         }}
       >
         <header
+          className="history-header"
           style={{
-            background:
-              "#2d6a4f",
-            padding:
-              "14px 28px",
-            display:
-              "flex",
-            alignItems:
-              "center",
+            background: "#2d6a4f",
+            padding: "14px 28px",
+            display: "flex",
+            alignItems: "center",
             gap: 16,
           }}
         >
@@ -3208,11 +3367,10 @@ export default function App() {
           }}
         >
           <div
+            className="history-stats"
             style={{
-              display:
-                "grid",
-              gridTemplateColumns:
-                "repeat(4, 1fr)",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
               gap: 14,
               marginBottom: 28,
             }}
@@ -3268,9 +3426,9 @@ export default function App() {
           </div>
 
           <div
+            className="history-filters"
             style={{
-              display:
-                "flex",
+              display: "flex",
               gap: 10,
               marginBottom: 20,
             }}
@@ -3344,9 +3502,8 @@ export default function App() {
               .map(
                 (order) => (
                   <div
-                    key={
-                      order.orderNum
-                    }
+                    className="history-order-card"
+                    key={order.orderNum}
                     style={{
                       background:
                         order.cancelled
@@ -3369,24 +3526,20 @@ export default function App() {
                     }}
                   >
                     <div
+                      className="history-order-header"
                       style={{
-                        display:
-                          "flex",
-                        justifyContent:
-                          "space-between",
-                        alignItems:
-                          "flex-start",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
                       }}
                     >
                       <div
+                        className="history-order-info"
                         style={{
-                          display:
-                            "flex",
-                          alignItems:
-                            "center",
+                          display: "flex",
+                          alignItems: "center",
                           gap: 10,
-                          flexWrap:
-                            "wrap",
+                          flexWrap: "wrap",
                         }}
                       >
                         <span
@@ -3421,6 +3574,46 @@ export default function App() {
                             "en-PH"
                           )}
                         </span>
+
+                        {order.customerName && (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              fontSize: 13,
+                              color: "#374151",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Customer: {order.customerName}
+                          </div>
+                        )}
+
+                        {!order.cancelled && (
+                          <span
+                            style={{
+                              background:
+                                order.status === "served"
+                                  ? "#dcfce7"
+                                  : "#fef3c7",
+                              color:
+                                order.status === "served"
+                                  ? "#166534"
+                                  : "#92400e",
+                              border:
+                                order.status === "served"
+                                  ? "1px solid #86efac"
+                                  : "1px solid #fcd34d",
+                              borderRadius: 20,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "2px 10px",
+                            }}
+                          >
+                            {order.status === "served"
+                              ? "✓ SERVED"
+                              : "⏳ PENDING"}
+                          </span>
+                        )}
 
                         {order.cancelled && (
                           <>
@@ -3465,11 +3658,10 @@ export default function App() {
                       </div>
 
                       <div
+                        className="history-order-actions"
                         style={{
-                          display:
-                            "flex",
-                          alignItems:
-                            "center",
+                          display: "flex",
+                          alignItems: "center",
                           gap: 12,
                         }}
                       >
@@ -3494,38 +3686,69 @@ export default function App() {
                         </div>
 
                         {!order.cancelled && (
-                          <button
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Cancel order ${order.orderNum}? It will remain in history as cancelled.`
-                                )
-                              ) {
-                                cancelOrder(
-                                  order.orderNum
-                                );
-                              }
-                            }}
+                          <div
                             style={{
-                              background:
-                                "#fff",
-                              border:
-                                "1px solid #fca5a5",
-                              color:
-                                "#dc2626",
-                              borderRadius:
-                                8,
-                              padding:
-                                "5px 12px",
-                              fontSize: 12,
-                              fontWeight:
-                                600,
-                              cursor:
-                                "pointer",
+                              display: "flex",
+                              gap: 8,
+                              alignItems: "center",
                             }}
                           >
-                            Cancel Order
-                          </button>
+                            {order.status !== "served" && (
+                              <button
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Mark order ${order.orderNum} as served?`
+                                    )
+                                  ) {
+                                    completeOrder(
+                                      order.orderNum
+                                    );
+                                  }
+                                }}
+                                style={{
+                                  background: "#f0faf5",
+                                  border:
+                                    "1px solid #86efac",
+                                  color: "#166534",
+                                  borderRadius: 8,
+                                  padding: "5px 12px",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                ✓ Completed
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Cancel order ${order.orderNum}? It will remain in history as cancelled.`
+                                  )
+                                ) {
+                                  cancelOrder(
+                                    order.orderNum
+                                  );
+                                }
+                              }}
+                              style={{
+                                background: "#fff",
+                                border:
+                                  "1px solid #fca5a5",
+                                color: "#dc2626",
+                                borderRadius: 8,
+                                padding: "5px 12px",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Cancel Order
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -3541,19 +3764,16 @@ export default function App() {
                           index
                         ) => (
                           <div
-                            key={
-                              index
-                            }
+                            key={index}
+                            className="history-item-row"
                             style={{
                               fontSize: 13,
-                              color:
-                                order.cancelled
-                                  ? "#9ca3af"
-                                  : "#555",
-                              display:
-                                "flex",
-                              justifyContent:
-                                "space-between",
+                              color: order.cancelled
+                                ? "#9ca3af"
+                                : "#555",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 12,
                             }}
                           >
                             <span>
@@ -3842,15 +4062,12 @@ export default function App() {
       }}
     >
       <header
+        className="history-header"
         style={{
-          background:
-            "#2d6a4f",
-          padding:
-            "14px 28px",
-          display:
-            "flex",
-          alignItems:
-            "center",
+          background: "#2d6a4f",
+          padding: "14px 28px",
+          display: "flex",
+          alignItems: "center",
           gap: 16,
         }}
       >
@@ -3972,10 +4189,9 @@ export default function App() {
       </header>
 
       <div
-        className="cards"
+        className="history-content"
         style={{
-          padding:
-            "28px 24px",
+          padding: "28px 24px",
         }}
       >
         <div
